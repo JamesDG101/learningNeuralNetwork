@@ -27,7 +27,7 @@ import numpy as np
 from matplotlib import rcParams
 from matplotlib.patches import Circle
 
-from template_model import L1, L2, compute_energies
+from template_model import CART_LIMIT, L1, L2, compute_energies
 from template_simulator import DoubleInvertedPendulumSimulator
 
 
@@ -96,6 +96,9 @@ ax1.set_xlim(-1.8, 1.8)
 ax1.set_ylim(-1.2, 1.2)
 ax1.set_axis_off()
 
+for wall_x in (-CART_LIMIT, CART_LIMIT):
+    ax1.axvline(wall_x, color='tab:red', linestyle='--', linewidth=1.5, alpha=0.7)
+
 energy_kin_line, = ax2.plot([], [], label='$E_{kin}$')
 energy_pot_line, = ax3.plot([], [], label='$E_{pot}$')
 position_line, = ax4.plot([], [], label='position')
@@ -108,9 +111,9 @@ fig.tight_layout(rect=[0, 0, 1, 0.95])
 
 control = {
     'active_keys': set(),
-    'force_step': 10.0,
+    'force_step': 6.0,
     'current_force': 0.0,
-    'max_force': 20.0,
+    'max_force': 12.0,
 }
 
 time_history = [0.0]
