@@ -2,8 +2,8 @@ import numpy as np
 
 
 M0 = 0.6
-M1 = 0.2
-M2 = 0.2
+M1 = 0.19
+M2 = 0.19
 L1 = 0.5
 L2 = 0.5
 L1_HALF = L1 / 2.0
@@ -11,6 +11,9 @@ L2_HALF = L2 / 2.0
 J1 = (M1 * L1_HALF ** 2) / 3.0
 J2 = (M2 * L2_HALF ** 2) / 3.0
 GRAVITY = 9.80665
+FRICTION_CART = 0.03
+FRICTION_ANGLE = 0.01
+CART_LIMIT = 1.35
 
 
 def solve_accelerations(state, force):
@@ -43,9 +46,9 @@ def solve_accelerations(state, force):
 
     rhs = np.array(
         [
-            force + h2 * dtheta1 ** 2 * sin1 + h3 * dtheta2 ** 2 * sin2,
-            h7 * sin1 - h5 * dtheta2 ** 2 * sin12,
-            h5 * dtheta1 ** 2 * sin12 + h8 * sin2,
+            force + h2 * dtheta1 ** 2 * sin1 + h3 * dtheta2 ** 2 * sin2 - FRICTION_CART * dpos,
+            h7 * sin1 - h5 * dtheta2 ** 2 * sin12 - FRICTION_ANGLE * dtheta1,
+            h5 * dtheta1 ** 2 * sin12 + h8 * sin2 - FRICTION_ANGLE * dtheta2,
         ],
         dtype=float,
     )
