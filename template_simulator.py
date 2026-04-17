@@ -22,7 +22,10 @@
 
 import numpy as np
 
-from template_model import state_derivative
+from template_model import CART_LIMIT, state_derivative
+
+
+WALL_RESTITUTION = 0.15
 
 
 class DoubleInvertedPendulumSimulator:
@@ -43,5 +46,14 @@ class DoubleInvertedPendulumSimulator:
         k3 = state_derivative(state + 0.5 * dt * k2, force)
         k4 = state_derivative(state + dt * k3, force)
 
-        self.state = state + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+        next_state = state + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+
+        if next_state[0] < -CART_LIMIT:
+            next_state[0] = -CART_LIMIT
+            next_state[3] = abs(next_state[3]) * WALL_RESTITUTION
+        elif next_state[0] > CART_LIMIT:
+            next_state[0] = CART_LIMIT
+            next_state[3] = -abs(next_state[3]) * WALL_RESTITUTION
+
+        self.state = next_state
         return self.state.copy()
