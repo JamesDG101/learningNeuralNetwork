@@ -27,6 +27,7 @@ import numpy as np
 from matplotlib import rcParams
 from matplotlib.patches import Circle
 
+from neural_network import BasicPolicyNetwork
 from template_model import CART_LIMIT, L1, L2, compute_energies
 from template_simulator import DoubleInvertedPendulumSimulator
 
@@ -50,6 +51,8 @@ elif scenario == 2:
     initial_state = np.array([0.8, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=float)
 else:
     raise ValueError('Scenario not defined.')
+
+target_position = 0.0
 
 simulator = DoubleInvertedPendulumSimulator(state=initial_state, dt=0.04)
 
@@ -105,16 +108,62 @@ position_line, = ax4.plot([], [], label='position')
 force_line, = ax5.plot([], [], label='force')
 position_reference = ax4.axhline(0.0, color='tab:gray', linestyle='--', linewidth=1.5)
 
-fig.suptitle('Left/Right or A/D to apply force. Space to stop. Q or Esc to quit.', y=0.98)
+fig.suptitle('NN controller active. Q or Esc to quit.', y=0.98)
 fig.align_ylabels()
 fig.tight_layout(rect=[0, 0, 1, 0.95])
 
 control = {
-    'active_keys': set(),
-    'force_step': 6.0,
     'current_force': 0.0,
     'max_force': 12.0,
 }
+
+policy_network = BasicPolicyNetwork(input_dim=10, hidden_dim=16, force_limit=6.0, seed=42)
+use_random_policy = True
+
+
+def _angle_features(theta):
+    return np.sin(theta), np.cos(theta)
+
+
+def build_observation(state, current_time, prev_force, target_x=0.0):
+    state = np.asarray(state, dtype=float).flatten()
+    pos, theta1, theta2, dpos, dtheta1, dtheta2 = state
+    sin1, cos1 = _angle_features(theta1)
+    sin2, cos2 = _angle_features(theta2)
+
+    return np.array(
+        [
+            pos - target_x,
+            sin1,
+            cos1,
+            sin2,
+            cos2,
+            dpos,
+            dtheta1,
+            dtheta2,
+            prev_force,
+            current_time,
+        ],
+        dtype=float,
+    )
+
+
+def nn_policy(observation):
+    """Basic NN policy with optional random exploration output."""
+    if use_random_policy:
+        return policy_network.random_action()
+    return policy_network.forward(observation)
+
+
+def compute_control_force(state, current_time):
+    obs = build_observation(
+        state=state,
+        current_time=current_time,
+        prev_force=control['current_force'],
+        target_x=target_position,
+    )
+    force = nn_policy(obs)
+    return float(np.clip(force, -control['max_force'], control['max_force']))
 
 time_history = [0.0]
 position_history = [simulator.state[0]]
@@ -127,46 +176,12 @@ energy_kin_history.append(initial_kinetic)
 energy_pot_history.append(initial_potential)
 
 
-def update_force():
-    force = 0.0
-    if 'left' in control['active_keys']:
-        force -= control['force_step']
-    if 'right' in control['active_keys']:
-        force += control['force_step']
-    control['current_force'] = float(np.clip(force, -control['max_force'], control['max_force']))
-
-
 def on_key_press(event):
-    if event.key in ('left', 'a'):
-        control['active_keys'].add('left')
-        update_force()
-    elif event.key in ('right', 'd'):
-        control['active_keys'].add('right')
-        update_force()
-    elif event.key == 'space':
-        control['active_keys'].clear()
-        control['current_force'] = 0.0
-    elif event.key == 'up':
-        control['force_step'] = min(control['force_step'] * 1.2, control['max_force'])
-        update_force()
-    elif event.key == 'down':
-        control['force_step'] = max(control['force_step'] * 0.8, 1.0)
-        update_force()
-    elif event.key in ('escape', 'q'):
+    if event.key in ('escape', 'q'):
         plt.close(fig)
 
 
-def on_key_release(event):
-    if event.key in ('left', 'a'):
-        control['active_keys'].discard('left')
-        update_force()
-    elif event.key in ('right', 'd'):
-        control['active_keys'].discard('right')
-        update_force()
-
-
 fig.canvas.mpl_connect('key_press_event', on_key_press)
-fig.canvas.mpl_connect('key_release_event', on_key_release)
 
 
 def refresh_plot():
@@ -193,10 +208,12 @@ plt.show(block=False)
 step_times = []
 while plt.fignum_exists(fig.number):
     tic = time.time()
+    current_time = time_history[-1]
+    control['current_force'] = compute_control_force(simulator.state, current_time)
     state = simulator.step(control['current_force'])
     elapsed = time.time() - tic
 
-    current_time = time_history[-1] + simulator.dt
+    current_time = current_time + simulator.dt
     kinetic_energy, potential_energy = compute_energies(state)
 
     time_history.append(current_time)
