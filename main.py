@@ -203,6 +203,20 @@ def refresh_plot():
     fig.canvas.draw_idle()
 
 
+def compute_reward(state, force):
+    pos, theta1, theta2, dpos, dtheta1, dtheta2 = state
+
+    # Upright = theta ≈ 0
+    reward = 0.0
+
+    reward -= theta1**2
+    reward -= theta2**2
+    reward -= 0.1 * dtheta1**2
+    reward -= 0.1 * dtheta2**2
+    reward -= 0.01 * force**2
+
+    return reward
+
 plt.show(block=False)
 
 step_times = []
