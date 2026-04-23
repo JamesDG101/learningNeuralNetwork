@@ -65,28 +65,32 @@ def pendulum_bars(state):
     line_2_y = np.array([line_1_y[1], line_1_y[1] + L2 * np.cos(state[2])])
     return np.stack((line_1_x, line_1_y)), np.stack((line_2_x, line_2_y))
 
+def compute_reward(state, force):
+    pos, theta1, theta2, dpos, dtheta1, dtheta2 = state
+
+    # Upright = theta ≈ 0
+    reward = 0.0
+
+    reward -= theta1**2
+    reward -= theta2**2
+    reward -= 0.1 * dtheta1**2
+    reward -= 0.1 * dtheta2**2
+    reward -= 0.01 * force**2
+
+    return reward
+
 
 fig = plt.figure(figsize=(16, 9))
 plt.ion()
 
-ax1 = plt.subplot2grid((4, 2), (0, 0), rowspan=4)
-ax2 = plt.subplot2grid((4, 2), (0, 1))
-ax3 = plt.subplot2grid((4, 2), (1, 1))
-ax4 = plt.subplot2grid((4, 2), (2, 1))
-ax5 = plt.subplot2grid((4, 2), (3, 1))
+ax1 = plt.subplot2grid((1, 2), (0, 0))
+ax2 = plt.subplot2grid((1, 2), (0, 1))
 
-ax2.set_ylabel('$E_{kin}$ [J]')
-ax3.set_ylabel('$E_{pot}$ [J]')
-ax4.set_ylabel('position [m]')
-ax5.set_ylabel('Input force [N]')
+ax2.set_ylabel('Reward')
+ax2.set_xlabel('time [s]')
+ax2.yaxis.set_label_position('right')
+ax2.yaxis.tick_right()
 
-for axis in [ax2, ax3, ax4, ax5]:
-    axis.yaxis.set_label_position('right')
-    axis.yaxis.tick_right()
-    if axis != ax5:
-        axis.xaxis.set_ticklabels([])
-
-ax5.set_xlabel('time [s]')
 ax1.axhline(0, color='black')
 
 bar1, = ax1.plot([], [], '-o', linewidth=5, markersize=10)
@@ -102,11 +106,7 @@ ax1.set_axis_off()
 for wall_x in (-CART_LIMIT, CART_LIMIT):
     ax1.axvline(wall_x, color='tab:red', linestyle='--', linewidth=1.5, alpha=0.7)
 
-energy_kin_line, = ax2.plot([], [], label='$E_{kin}$')
-energy_pot_line, = ax3.plot([], [], label='$E_{pot}$')
-position_line, = ax4.plot([], [], label='position')
-force_line, = ax5.plot([], [], label='force')
-position_reference = ax4.axhline(0.0, color='tab:gray', linestyle='--', linewidth=1.5)
+reward_line, = ax2.plot([], [], label='reward', color='tab:green')
 
 fig.suptitle('NN controller active. Q or Esc to quit.', y=0.98)
 fig.align_ylabels()
@@ -166,14 +166,7 @@ def compute_control_force(state, current_time):
     return float(np.clip(force, -control['max_force'], control['max_force']))
 
 time_history = [0.0]
-position_history = [simulator.state[0]]
-energy_kin_history = []
-energy_pot_history = []
-force_history = [0.0]
-
-initial_kinetic, initial_potential = compute_energies(simulator.state)
-energy_kin_history.append(initial_kinetic)
-energy_pot_history.append(initial_potential)
+reward_history = [compute_reward(simulator.state, 0.0)]
 
 
 def on_key_press(event):
@@ -188,34 +181,15 @@ def refresh_plot():
     bar1.set_data(*pendulum_bars(simulator.state)[0])
     bar2.set_data(*pendulum_bars(simulator.state)[1])
 
-    energy_kin_line.set_data(time_history, energy_kin_history)
-    energy_pot_line.set_data(time_history, energy_pot_history)
-    position_line.set_data(time_history, position_history)
-    force_line.set_data(time_history, force_history)
+    reward_line.set_data(time_history, reward_history)
 
-    for axis in [ax2, ax3, ax4, ax5]:
-        axis.relim()
-        axis.autoscale_view(scalex=False, scaley=True)
-        axis.set_xlim(0.0, max(5.0, time_history[-1] + simulator.dt))
+    ax2.relim()
+    ax2.autoscale_view(scalex=False, scaley=True)
+    ax2.set_xlim(0.0, max(5.0, time_history[-1] + simulator.dt))
 
     ax1.set_title(f'Force: {control["current_force"]:.1f} N')
 
     fig.canvas.draw_idle()
-
-
-def compute_reward(state, force):
-    pos, theta1, theta2, dpos, dtheta1, dtheta2 = state
-
-    # Upright = theta ≈ 0
-    reward = 0.0
-
-    reward -= theta1**2
-    reward -= theta2**2
-    reward -= 0.1 * dtheta1**2
-    reward -= 0.1 * dtheta2**2
-    reward -= 0.01 * force**2
-
-    return reward
 
 plt.show(block=False)
 
@@ -228,13 +202,10 @@ while plt.fignum_exists(fig.number):
     elapsed = time.time() - tic
 
     current_time = current_time + simulator.dt
-    kinetic_energy, potential_energy = compute_energies(state)
+    reward = compute_reward(state, control['current_force'])
 
     time_history.append(current_time)
-    position_history.append(state[0])
-    energy_kin_history.append(kinetic_energy)
-    energy_pot_history.append(potential_energy)
-    force_history.append(control['current_force'])
+    reward_history.append(reward)
     step_times.append(elapsed)
 
     refresh_plot()
